@@ -1,0 +1,20 @@
+# máy tính Windows + máy chủ Linux: ép file chạy trên Linux dùng LF,
+# nếu không bash sẽ báo "$'\r': command not found" khi chạy install.sh
+*.sh text eol=lf
+*.service text eol=lf
+Caddyfile text eol=lf
+env.production text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.txt text eol=lf
+
+# không bao giờ "sửa" file nhị phân
+*.wav binary
+*.db binary
+*.sqlite binary
+*.png binary
+*.jpg binary

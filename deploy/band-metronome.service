@@ -1,0 +1,46 @@
+[Unit]
+Description=Band Metronome (Flask + gunicorn)
+Documentation=https://github.com/<user>/band-metronome
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bandmetro
+Group=bandmetro
+WorkingDirectory=/opt/band-metronome
+EnvironmentFile=/etc/band-metronome/env
+# unit đặt code ở /opt read-only -> đừng sinh __pycache__
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# -w 1 là BẮT BUỘC: hàng đợi job render (JOBS) và rate-limit nằm trong tiến trình.
+# Nhiều worker = /api/progress có thể hỏi sai tiến trình và trả 404.
+# --timeout dài vì send_file có thể phải đẩy file WAV 60 MB cho client mạng chậm.
+ExecStart=/opt/band-metronome/venv/bin/gunicorn app:app \
+    -w 1 --threads 4 \
+    -b 127.0.0.1:8000 \
+    --timeout 300 --graceful-timeout 30 --keep-alive 5 \
+    --access-logfile - --error-logfile - --log-level info
+
+Restart=always
+RestartSec=3
+KillSignal=SIGTERM
+LimitNOFILE=4096
+
+# --- hardening ---
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/band-metronome
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+SystemCallFilter=@system-service
+# Trần RAM: bài 30 phút @48 kHz đỉnh ~0,9 GB (float32 + bản concatenate),
+# MAX_JOBS=2 -> ~1,8 GB. Đặt 4G để lỗi lộ trình không làm sập cả VM 12 GB.
+MemoryMax=4G
+# Bỏ comment nếu TTS (espeak-ng) không ghi được file tạm:
+# PrivateTmp=no
+
+[Install]
+WantedBy=multi-user.target

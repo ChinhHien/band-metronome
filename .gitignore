@@ -1,0 +1,23 @@
+# --- môi trường dev / venv ---
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# --- dữ liệu chạy (không bao giờ commit) ---
+output/
+history.db
+history.db-wal
+history.db-shm
+backups/
+
+# --- secrets / biến máy chủ ---
+.env
+/etc-secrets/
+deploy/duckdns.env
+
+# --- linh tinh ---
+*.log
+.DS_Store
+.idea/
+.vscode/

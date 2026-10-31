@@ -1,0 +1,7 @@
+Flask>=3.0
+numpy>=1.26
+gunicorn>=22.0; sys_platform != 'win32'
+waitress>=3.0; sys_platform == 'win32'
+# Tuỳ chọn: giọng đọc marker offline (cần espeak/SAPI5/NSSpeechSynthesizer của hệ điều hành)
+pyttsx3>=2.90
+
