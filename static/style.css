@@ -46,18 +46,38 @@ main{min-width:0}
   display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px)}
 #name-modal[hidden]{display:none}
 #name-modal .gate-card{width:min(440px,100%)}
+#name-modal .gate-card:has(#import-box:not([hidden])){width:min(640px,100%)}
 .name-field{display:grid;gap:4px;font-size:.85rem;color:var(--muted);margin-top:2px}
 #name-input{width:100%;padding:10px 12px;font-size:1.05rem;color:var(--ink);border-radius:var(--r-sm)}
 #name-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 20%,transparent)}
 .err-hint{margin:0;color:var(--warn);font-size:.85rem}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:2px}
 .modal-actions button{padding:9px 18px;font-size:.95rem;border-radius:var(--r-sm)}
+#name-import{margin-right:auto}
+
+/* === Khung dán JSON trong modal tạo bài === */
+#import-box{display:grid;gap:10px;padding:14px;border:1px dashed var(--line);border-radius:var(--r-md);
+  background:color-mix(in srgb,var(--bg) 55%,transparent)}
+#import-box[hidden]{display:none}
+.import-help{margin:0;font-size:.82rem;color:var(--muted);text-transform:none;letter-spacing:0}
+.import-help code,.import-rules code{font:600 .8em/1.4 ui-monospace,Consolas,monospace;color:var(--ink);
+  background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.import-schema{margin:0;padding:12px 14px;overflow:auto;background:var(--bg);border:1px solid var(--line);
+  border-radius:var(--r-sm);color:var(--ink);font:500 .78rem/1.55 ui-monospace,Consolas,monospace;
+  white-space:pre}
+.import-rules{margin:0;padding-left:18px;display:grid;gap:3px;font-size:.8rem;color:var(--muted)}
+#import-text{width:100%;resize:vertical;min-height:120px;padding:10px 12px;color:var(--ink);
+  font:500 .85rem/1.55 ui-monospace,Consolas,monospace;background:var(--bg);border:1px solid var(--line);
+  border-radius:var(--r-sm)}
+#import-text:focus{border-color:var(--accent);outline:none;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
 
 /* === Menu chuột phải trên mục lịch sử === */
 #ctx-menu{position:fixed;z-index:80;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);
   padding:5px;display:grid;min-width:172px;box-shadow:var(--shadow-md);animation:pop .14s ease-out}
 #ctx-menu[hidden]{display:none}
-#ctx-menu button{width:100%;display:flex;align-items:center;gap:10px;text-align:left;background:transparent;
+#ctx-menu button{width:100%;display:flex;align-items:center;justify-content:flex-start;gap:10px;
+  text-align:left;background:transparent;
   color:var(--ink);border:0;border-radius:var(--r-sm);padding:9px 10px;font-size:.92rem;cursor:pointer;box-shadow:none}
 #ctx-menu button:hover{background:var(--bg)}
 #ctx-menu svg{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;
@@ -70,12 +90,36 @@ main{min-width:0}
   background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px;box-shadow:var(--shadow-sm)}
 #history-panel h2{margin:0 0 12px;font:700 .78rem/1 Figtree,sans-serif;text-transform:uppercase;
   letter-spacing:.09em;color:var(--muted)}
-#hist-new{width:100%;margin:0 0 12px;padding:9px 10px;font-size:.9rem;border-style:dashed;border-radius:var(--r-sm);
-  color:var(--muted);background:transparent;box-shadow:none}
-#hist-new:hover{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.hist-head{display:flex;align-items:center;gap:10px;margin:0 0 12px}
+#history-panel .hist-head h2{margin:0;flex:1}
+/* nút tạo bài mới: icon thuần, hover đổi màu + vòng sáng + dấu cộng xoay */
+.icon-new{width:34px;height:34px;flex:0 0 auto;padding:0;border-radius:50%;justify-content:center;
+  border:1px dashed var(--line);background:transparent;color:var(--muted);box-shadow:none;
+  transition:color .18s ease,border-color .18s ease,background .18s ease,box-shadow .25s ease,transform .18s ease}
+.icon-new svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;
+  transition:transform .3s cubic-bezier(.2,.9,.3,1.3)}
+.icon-new:hover,.icon-new:focus-visible{color:var(--accent-ink);border-color:transparent;
+  background:var(--accent);transform:translateY(-1px) scale(1.06);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent),var(--shadow-sm)}
+.icon-new:hover svg,.icon-new:focus-visible svg{transform:rotate(90deg)}
+.icon-new:active{transform:scale(.93);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 30%,transparent)}
+/* ô tìm bài hát */
+.hist-search{display:flex;align-items:center;gap:7px;margin:0 0 10px;padding:7px 10px;
+  border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg);color:var(--muted);
+  transition:border-color .15s ease,box-shadow .15s ease}
+.hist-search svg{width:14px;height:14px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}
+.hist-search:focus-within{border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)}
+#hist-search-input{flex:1;min-width:0;border:0;background:transparent;padding:0;font:inherit;
+  font-size:.9rem;color:var(--ink);text-transform:none;letter-spacing:0;box-shadow:none}
+#hist-search-input:focus{outline:none;border:0;box-shadow:none}
+#hist-search-input::placeholder{color:var(--muted);opacity:.75}
+.hist-empty{font-size:.85rem;color:var(--muted);padding:10px 11px;border:1px dashed var(--line);
+  border-radius:var(--r-sm);text-align:center}
 #history-list{list-style:none;margin:0;padding:0;display:grid;gap:3px}
 li.hist{position:relative}
-.hist-open{display:grid;gap:2px;width:100%;text-align:left;font:inherit;background:transparent;
+.hist-open{display:grid;grid-template-columns:minmax(0,1fr);justify-content:start;gap:2px;
+  width:100%;text-align:left;font:inherit;background:transparent;
   color:var(--ink);border:1px solid transparent;border-radius:var(--r-sm);padding:9px 11px;cursor:pointer;
   transition:background .15s ease,border-color .15s ease}
 .hist-open:hover{background:var(--bg);border-color:var(--line)}
@@ -84,8 +128,6 @@ li.hist.active .hist-open{background:var(--bg);border-color:var(--line);
 .hist-title{font-weight:600;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 li.hist.active .hist-title{color:var(--accent)}
 .hist-meta{font-size:.74rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.muted.empty-state{display:flex;align-items:center;gap:8px;margin:6px 0}
-.muted.empty-state::before{content:"🎵";opacity:.7}
 
 /* === Header === */
 header{display:flex;flex-wrap:wrap;gap:14px 18px;align-items:center;justify-content:space-between;margin-bottom:22px}
@@ -118,7 +160,6 @@ h1::before{content:"";width:.72em;height:.72em;border-radius:8px;flex:none;
 #now-time::before{content:"Đang phát";display:block;font-size:.62rem;text-transform:uppercase;
   letter-spacing:.08em;font-weight:700;opacity:.8}
 #result #dl{margin-left:auto;padding:10px 16px;font-size:.9rem;border-radius:999px}
-#result .spacer{flex:1}
 .tl-wrap{position:relative;outline:none}
 #timeline{display:flex;height:52px;border-radius:var(--r-md);overflow:hidden;background:var(--line);
   gap:3px;box-shadow:var(--shadow-sm)}
@@ -127,7 +168,6 @@ h1::before{content:"";width:.72em;height:.72em;border-radius:8px;flex:none;
   text-shadow:0 1px 2px rgba(0,0,0,.35)}
 #timeline div .tl-name{overflow:hidden;text-overflow:ellipsis}
 #timeline div .tl-meta{font-size:.64rem;font-weight:600;opacity:.85;overflow:hidden;text-overflow:ellipsis}
-#timeline div:not(.wide) .tl-meta{display:none}
 #timeline div::before{content:"";position:absolute;inset:0;
   background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(0,0,0,.14));pointer-events:none}
 #timeline div:hover::before{background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(0,0,0,.08))}
@@ -163,7 +203,7 @@ input:focus,select:focus{border-color:var(--accent);outline:none;
   box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
 input[type=number]{width:84px;font-variant-numeric:tabular-nums}
 input.name{width:180px;font-weight:600;font-size:.95rem}
-label.name-edit,li .fields>label:first-child{text-transform:none;letter-spacing:0}
+li .fields>label:first-child{text-transform:none;letter-spacing:0}
 label.check{display:flex;align-items:center;gap:8px;font-size:.95rem;color:var(--ink);
   font-weight:500;text-transform:none;letter-spacing:0;padding-bottom:6px;cursor:pointer}
 input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;cursor:pointer;box-shadow:none;
@@ -217,15 +257,6 @@ button:disabled{opacity:.6;cursor:wait;transform:none!important}
 
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
 
-/* === Menu "Mẫu bài" === */
-#tpl-menu{position:fixed;z-index:80;left:24px;bottom:24px;background:var(--card);border:1px solid var(--line);
-  border-radius:var(--r-md);padding:6px;display:grid;min-width:min(340px,calc(100vw - 48px));
-  box-shadow:var(--shadow-md);animation:pop .14s ease-out}
-#tpl-menu[hidden]{display:none}
-#tpl-menu button{width:100%;display:grid;gap:2px;text-align:left;background:transparent;color:var(--ink);
-  border:0;border-radius:var(--r-sm);padding:9px 10px;cursor:pointer;box-shadow:none;font-size:.92rem}
-#tpl-menu button:hover{background:var(--bg);transform:none}
-#tpl-menu button span{font-size:.74rem;color:var(--muted);font-weight:500}
 /* === Thanh tiến độ tổng hợp === */
 #gen-progress{flex:1 1 140px;min-width:120px;height:8px;border-radius:999px;background:var(--line);overflow:hidden}
 #gen-progress[hidden]{display:none}

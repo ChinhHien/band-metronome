@@ -1,0 +1,81 @@
+/* Style riêng cho tính năng "AI đọc bố cục" (ai_layout).
+   Dùng biến màu của style.css; xoá file này cùng include là mất hết UI. */
+
+/* nút nhỏ cạnh tiêu đề modal tạo bài */
+.ai-head{display:flex;align-items:center;gap:10px}
+.ai-head h2{flex:1}
+.ai-chip{width:auto;padding:6px 12px;font-size:.8rem;border-radius:999px;
+  background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);
+  border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);box-shadow:none;line-height:1.2}
+.ai-chip:hover{background:color-mix(in srgb,var(--accent) 22%,transparent);transform:translateY(-1px)}
+
+/* panel phủ trên modal */
+#ai-panel{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;
+  padding:20px;background:color-mix(in srgb,var(--bg) 60%,#000);backdrop-filter:blur(4px)}
+#ai-panel[hidden]{display:none}
+.ai-card{width:min(520px,100%);max-height:88vh;overflow:auto;display:grid;gap:12px;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:22px;
+  box-shadow:var(--shadow-md);animation:pop .18s ease-out}
+.ai-card h3{margin:0;font:700 1.25rem/1.2 "Bricolage Grotesque",sans-serif}
+.ai-note{margin:0;font-size:.8rem;color:var(--muted);text-transform:none;letter-spacing:0;line-height:1.5}
+.ai-note code{font:600 .95em ui-monospace,Consolas,monospace}
+
+.ai-field{display:grid;gap:4px;font-size:.78rem;color:var(--muted);font-weight:600;
+  text-transform:uppercase;letter-spacing:.03em}
+.ai-field[hidden]{display:none}
+.ai-field input{font:inherit;text-transform:none;letter-spacing:0;color:var(--ink);width:100%;
+  background:var(--bg);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 10px}
+/* khối cấu hình model của riêng thiết bị */
+.ai-cfg{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:var(--r-sm);
+  background:color-mix(in srgb,var(--bg) 55%,transparent)}
+.ai-cfg[hidden]{display:none}
+.ai-cfg-on{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.78rem;color:var(--muted);
+  padding:8px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg)}
+.ai-cfg-on[hidden]{display:none}
+.ai-cfg-on span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-cfg-on button{padding:5px 11px;font-size:.78rem;border-radius:999px;box-shadow:none}
+#ai-body{display:grid;gap:12px}
+#ai-body[hidden]{display:none}
+.ai-close-row{justify-content:flex-start}
+
+/* ô chọn tệp — một đường vào duy nhất, không còn tab */
+.ai-drop{padding:14px;border:1px dashed var(--line);border-radius:var(--r-sm);
+  background:color-mix(in srgb,var(--bg) 55%,transparent)}
+.ai-drop input[type=file]{border:0;background:transparent;padding:2px 0 6px;font-size:.85rem}
+.ai-drop small{font-weight:400;text-transform:none;letter-spacing:0}
+.ai-field input:focus-within{border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+
+.ai-actions{display:flex;gap:10px;justify-content:flex-end}
+.ai-actions button{padding:9px 18px;font-size:.92rem;border-radius:var(--r-sm)}
+
+/* ô kết quả đo BPM/thời lượng mà trình duyệt thực hiện trên tệp đã chọn */
+.ai-meter{display:grid;gap:6px;padding:10px 12px;border:1px dashed var(--line);border-radius:var(--r-sm);
+  background:color-mix(in srgb,var(--bg) 55%,transparent)}
+.ai-meter[hidden]{display:none}
+.ai-meter b{color:var(--accent)}
+.ai-alts{display:flex;flex-wrap:wrap;gap:6px}
+.ai-chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.ai-chip.on:hover{background:var(--accent);transform:none}
+#ai-measure{display:grid}
+#ai-measure[hidden]{display:none}
+
+/* hàng checkbox áp dụng cho mọi đoạn trong danh sách kết quả */
+.ai-bulk{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:10px 12px;
+  border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg)}
+.ai-bulk-t{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.ai-bulk .check{font-size:.85rem;padding-bottom:0}
+.ai-bulk label.check{display:inline-flex}
+.ai-bulk .ai-note{flex:1 1 100%;font-size:.74rem}
+
+#ai-busy{display:grid;gap:6px;font-size:.8rem;color:var(--muted)}
+#ai-busy[hidden]{display:none}
+.ai-track{height:8px;border-radius:999px;background:var(--line);overflow:hidden}
+#ai-bar{display:block;height:100%;width:0;background:var(--accent);transition:width .4s ease}
+
+#ai-result{display:grid;gap:10px;padding-top:4px;border-top:1px dashed var(--line)}
+#ai-result[hidden]{display:none}
+#ai-preview{list-style:none;margin:0;padding:0;display:grid;gap:4px;max-height:34vh;overflow:auto}
+#ai-preview li{display:flex;justify-content:space-between;gap:12px;font-size:.85rem;
+  padding:7px 10px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r-sm)}
+#ai-preview li span{color:var(--muted);font-size:.78rem;white-space:nowrap}

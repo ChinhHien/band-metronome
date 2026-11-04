@@ -98,40 +98,44 @@ def assemble_song(song, out_path, progress_cb=None):
         if progress_cb:
             progress_cb(done / total_steps, label)
 
-    # Bar lead: LUÔN LUÔN đúng 1 bar, chỉ tiếng click, lấy BPM + nhịp của đoạn đầu tiên.
+    # Bar lead: LUÔN LUÔN đúng 1 bar, lấy BPM + nhịp của đoạn đầu tiên. Bar này không
+    # thuộc bài hát nên nó kiêm luôn bar đếm vào của đoạn đầu — không cộng thêm bar.
     lead = sections[0]
     lead_num = beats_per_bar(lead["time_signature"])
-    parts.append(click_track(lead["bpm"], lead_num, lead["time_signature"], sr=sr))
+    lead_track = click_track(lead["bpm"], lead_num, lead["time_signature"], sr=sr)
+    if lead.get("count_in"):
+        _speak_words(lead_track, 60 * sr / lead["bpm"], 0,
+                     _marker_words(lead["name"], lead_num, lead["read_marker"]), warnings, sr)
+    parts.append(lead_track)
     _progress(1, "bar dẫn")
 
-    # Các đoạn thật (bar lead không phải một session, không lặp lại trong vòng lặp)
+    # Các đoạn thật. Đếm vào / đếm chuyển KHÔNG BAO GIỜ thêm bar: chúng là lời đọc đặt
+    # trên bar cuối (và bar kế cuối) của đoạn liền trước, nên tổng số bar của file luôn
+    # khớp số bar anh đã gõ cho bài gốc. Ai muốn có bar riêng để đổi tempo thì tự thêm
+    # bar thừa vào đầu đoạn đó.
     for idx, s in enumerate(sections):
         num = beats_per_bar(s["time_signature"])
         beat = 60 * sr / s["bpm"]
+        track = click_track(s["bpm"], s["bars"] * num, s["time_signature"], sr=sr)
 
         next_s = sections[idx + 1] if idx < len(sections) - 1 else None
-        # Đếm chuyển chỉ hiệu lực khi đoạn kế bật đếm vào:
-        # bar kế cuối đọc "one two three four", bar cuối = bar đếm vào của đoạn kế.
-        count_out_active = bool(s.get("count_out") and next_s and next_s.get("count_in"))
-        # Bar đếm vào của đoạn này bị hút vào bar cuối đoạn trước khi đoạn trước bật đếm chuyển.
-        prev_s = sections[idx - 1] if idx > 0 else None
-        absorbed = bool(prev_s and prev_s.get("count_out") and s.get("count_in"))
-        has_count_in = bool(s.get("count_in")) and not absorbed
+        cue_in = bool(next_s and next_s.get("count_in"))
+        last = s["bars"] - 1                      # bar cuối của đoạn này
 
-        track = click_track(s["bpm"], (s["bars"] + (1 if has_count_in else 0)) * num, s["time_signature"], sr=sr)
-
-        # --- Bar đếm vào (bật "Đọc tên": "Intro 2 3 4"; tắt: "one two three four") ---
-        if has_count_in:
-            _speak_words(track, beat, 0, _marker_words(s["name"], num, s["read_marker"]), warnings, sr)
-
-        total_bars = s["bars"] + (1 if has_count_in else 0)
-        if count_out_active:
-            co_beat = (total_bars - 2) * num if total_bars >= 2 else 0
-            _speak_words(track, beat, co_beat, NUMBERS[:num], warnings, sr)
-            last_beat = (total_bars - 1) * num
-            _speak_words(track, beat, last_beat,
-                         _marker_words(next_s["name"], beats_per_bar(next_s["time_signature"]),
-                                       next_s.get("read_marker", True)), warnings, sr)
+        if cue_in:
+            if last >= 0:
+                # đếm vào cho đoạn kế, đếm theo số phách của bar hiện tại
+                _speak_words(track, beat, last * num,
+                             _marker_words(next_s["name"], num,
+                                           next_s.get("read_marker", True)), warnings, sr)
+            else:
+                warnings.append(f'Đoạn “{s["name"]}” không có bar nào để đếm vào cho đoạn sau.')
+        if s.get("count_out"):
+            co = last - 1 if cue_in else last     # nhường bar cuối cho đếm vào nếu đoạn sau cần
+            if co >= 0:
+                _speak_words(track, beat, co * num, NUMBERS[:num], warnings, sr)
+            else:
+                warnings.append(f'Đoạn “{s["name"]}” chỉ có 1 bar nên không còn bar để đếm chuyển.')
 
         parts.append(track)
         _progress(idx + 2, s["name"])

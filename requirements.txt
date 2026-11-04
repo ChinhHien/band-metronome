@@ -5,3 +5,8 @@ waitress>=3.0; sys_platform == 'win32'
 # Tuỳ chọn: giọng đọc marker offline (cần espeak/SAPI5/NSSpeechSynthesizer của hệ điều hành)
 pyttsx3>=2.90
 
+# Cho tinh nang ai_layout/ (AI doc bo cuc bai hat). Thieu thu vien nay thi app van
+# chay binh thuong, chi /api/ai/* bao "thieu thu vien openai".
+# Server khong giu API key nao: moi thiet bi tu nhap tren web va gui kem tung request.
+openai>=1.40
+

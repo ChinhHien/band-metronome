@@ -1,5 +1,8 @@
 const COLORS = ["--c0", "--c1", "--c2", "--c3", "--c4"];
 const SIGS = ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8"];
+/* Gợi ý tên đoạn (datalist trên ô "Tên đoạn" — vẫn tự gõ được tên khác) */
+const SECTION_NAMES = ["Intro", "Verse", "Pre-Chorus", "Chorus", "Post-Chorus", "Refrain",
+  "Interlude", "Bridge", "Solo", "Breakdown", "Outro", "Coda"];
 /* Chuẩn đầu ra (sample rate) — phải khớp audio_engine.click_generator.RATES. Mặc định 48 kHz. */
 const RATES = [
   ["22050", "22.05 kHz · nhẹ"],
@@ -34,23 +37,25 @@ const setBase = (bpm, sig, rate) => {
   if (sig && SIGS.includes(sig)) $("base-sig").value = sig;
   if (rate && RATES.some(([v]) => String(rate) === v)) $("base-srate").value = String(rate);
 };
-const beatsPer = (sig) => Number(String(sig || "4/4").split("/")[0]) || 4;
 /* BPM chưa hợp lệ/không có thì hiển thị "—" (ô nhập để trống là null, không phải 0) */
 const bpmLabel = (s) => (Number(s.bpm) >= 20 && Number(s.bpm) <= 400 ? s.bpm : "—");
 
 /* Tên bài giờ nằm trên mục lịch sử (bài đang mở) — đổi qua menu chuột phải */
-let activeTitle = "Bài hát mới";
+let activeTitle = "Bài hát chưa có tiêu đề";
 
 /* Tạo đoạn mới theo cấu hình toàn bài.
-   Đếm vào là CHECKBOX (đúng 1 bar); "Đọc tên" (read_marker) bật/tắt việc đọc
-   tên đoạn trong bar đếm vào: bật → "Intro 2 3 4", tắt → chỉ "one two three four". */
+   "Đếm vào" và "Đếm chuyển" chỉ quyết định LỜI ĐỌC trên bar đã có, không thêm bar:
+   đếm vào của đoạn nằm ở bar cuối đoạn trước (hoặc bar dẫn nếu là đoạn đầu),
+   đếm chuyển nằm ở bar áp chót khi đoạn sau có đếm vào, nếu không thì ở bar cuối.
+   "Đọc tên" (read_marker) bật/tắt việc đọc tên đoạn: bật → "Intro 2 3 4",
+   tắt → chỉ "one two three four". */
 const makeSection = (name) => ({
   name,
   bpm: baseBpm(),
   bars: 4,
   time_signature: baseSig() || SIGS[2],
   count_in: true,
-  count_out: true,   /* mặc định bật đếm chuyển (chỉ phát tác dụng khi đoạn kế bật Đếm vào) */
+  count_out: true,   /* mặc định bật: đếm chuyển ở cuối đoạn, độc lập với đoạn sau */
   read_marker: true,
 });
 
@@ -58,14 +63,11 @@ const makeSection = (name) => ({
    lấy BPM + nhịp từ ô ở trên. Session đầu ĐƯỢC PHÉP có đếm vào ("Intro 2 3 4"). */
 let sections = [makeSection("Intro")];
 
-const secs = (s, i) => {
+/* Thời lượng một đoạn = đúng số bar của nó, không cộng bar đếm nào cả. */
+const secs = (s) => {
   const num = Number(s.time_signature.split("/")[0]);
   const bpm = Number(s.bpm);
-  /* bar đếm vào riêng bị bỏ khi nó đã nằm trên bar cuối đoạn trước */
-  const next = sections[i + 1];
-  const absorbed = Boolean(s.count_out && next && next.count_in);
-  const ci = s.count_in && !absorbed ? 1 : 0;
-  return ((Number(s.bars) + ci) * num * 60) / (bpm >= 20 && bpm <= 400 ? bpm : 120);
+  return (Number(s.bars) * num * 60) / (bpm >= 20 && bpm <= 400 ? bpm : 120);
 };
 const noBpm = () => sections.filter((s) => !(Number(s.bpm) >= 20 && Number(s.bpm) <= 400)).length;
 
@@ -79,11 +81,15 @@ const dropDraft = (id) => {
   const b = draftBucket(), k = String(id);
   if (b[k]) { delete b[k]; localStorage.setItem(DRAFT_KEY, JSON.stringify(b)); }
 };
-function saveDraft(dirty = true) {
+/* "Có nháp chưa tạo metronome" chỉ khi người dùng thực sự sửa kể từ lần render gần
+   nhất. Tự lưu lúc F5/beforeunload phải giữ nguyên cờ này, nếu không mọi bài đã tạo
+   xong đều bị hỏi khôi phục nháp sau khi tải lại trang. */
+let unsaved = false;
+function saveDraft() {
   try {
     const b = draftBucket();
     b[activeHistoryId ?? "new"] = {
-      ts: Date.now(), dirty, activeTitle,
+      ts: Date.now(), dirty: unsaved, activeTitle,
       state: { sections, base_bpm: baseBpm(), base_sig: baseSig(), base_rate: $("base-srate").value },
     };
     Object.keys(b).filter((k) => k !== "__open" && k !== String(activeHistoryId ?? "new"))
@@ -93,7 +99,7 @@ function saveDraft(dirty = true) {
   } catch { /* localStorage đầy / bị chặn → bỏ qua, không chặn thao tác */ }
 }
 let draftTimer = null;
-const scheduleDraft = () => { clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 500); };
+const scheduleDraft = () => { unsaved = true; clearTimeout(draftTimer); draftTimer = setTimeout(saveDraft, 500); };
 const afterChange = () => { drawTimeline(); scheduleDraft(); };
 window.addEventListener("beforeunload", () => saveDraft());
 
@@ -102,19 +108,25 @@ function loadDraftState(d) {
   sections = Array.isArray(st.sections) && st.sections.length ? st.sections : sections;
   setBase(st.base_bpm, st.base_sig, st.base_rate);
   activeTitle = d.activeTitle || activeTitle;
+  unsaved = Boolean(d.dirty);
   render();
 }
 
 /* === Thanh tổng: mỗi đoạn 1 ô theo đúng tỉ lệ thời gian, tên + BPM + nhịp === */
 function drawTimeline() {
   const total = sections.reduce((a, s, i) => a + secs(s, i), 0);
-  const w = $("timeline").clientWidth || 860;   /* nhãn phụ chỉ hiện khi block đủ rộng */
+  const w = $("timeline").clientWidth || 860;
   $("timeline").innerHTML = sections.map((s, i) => {
     const d = secs(s, i);
-    return `<div ${d / (total || 1) * w >= 120 ? 'class="wide"' : ""} style="flex:${d};background:var(${COLORS[i % COLORS.length]})"
-        title="${esc(s.name || "Không tên")}, ${bpmLabel(s)} BPM, ${s.bars} bar${s.count_in ? ", đếm vào" : ""}${s.count_out ? ", đếm chuyển" : ""}">
-      <span class="tl-name">${esc(s.name || "Không tên")}</span>
-      <span class="tl-meta">${bpmLabel(s)} · ${beatsPer(s.time_signature)} nhịp</span></div>`;
+    const px = d / (total || 1) * w;
+    const name = String(s.name || "").trim();
+    const cell = `<div style="flex:${d};background:var(${COLORS[i % COLORS.length]})" `
+      + `title="${esc(name || "Chưa đặt tên")}, ${bpmLabel(s)} BPM, ${s.bars} bar">`;
+    /* đoạn không có tên -> chỉ là ô màu trống; thông tin vẫn xem được khi rê chuột */
+    if (!name) return `${cell}</div>`;
+    const meta = px >= 60 ? `<span class="tl-meta">${bpmLabel(s)} · ${esc(s.time_signature)}</span>` : "";
+    const nm = px >= 34 ? `<span class="tl-name">${esc(name)}</span>` : "";
+    return `${cell}${nm}${meta}</div>`;
   }).join("");
   const miss = noBpm();
   $("total").textContent = sections.length
@@ -135,7 +147,7 @@ function render() {
       <div class="bar"></div>
       <div class="drag-handle" draggable="true" aria-label="Kéo để di chuyển" title="Kéo để di chuyển">≡</div>
       <div class="fields">
-        <label>Tên đoạn<input class="name" data-k="name" value="${esc(s.name)}"></label>
+        <label>Tên đoạn<input class="name" data-k="name" list="name-suggestions" value="${esc(s.name)}"></label>
         <div class="row">
           <label>BPM<input type="number" data-k="bpm" min="20" max="400" value="${s.bpm ?? ""}"></label>
           <label>Nhịp<select data-k="time_signature">${SIGS.map(
@@ -161,7 +173,6 @@ function render() {
         if (k === "count_in") {
           const rm = el.closest(".fields").querySelector("[data-k='read_marker']");
           if (rm) rm.disabled = !s.count_in;    /* không đếm vào → không đọc tên */
-          if (!s.count_in) s.count_out = false; /* không ĐV → không ĐC */
         }
         afterChange();
       }));
@@ -344,7 +355,8 @@ $("generate").onclick = async () => {
     $("dl").href = `${res.download}?title=${encodeURIComponent(activeTitle)}`;
     st.className = "ok"; st.textContent = `Đã tạo xong ở ${(res.sample_rate / 1000)} kHz, dài ${fmt(res.duration)}.`
       + (res.warnings.length ? " " + res.warnings.join(" ") : "");
-    saveDraft(false);                         /* nháp giờ khớp bản ghi → không hỏi khôi phục nữa */
+    unsaved = false;
+    saveDraft();                                /* nháp giờ khớp bản ghi → không hỏi khôi phục nữa */
     if (activeHistoryId) loadHistory();   /* làm mới meta của bài đang mở */
   } catch (e) {
     st.className = "err"; st.textContent = e.message;
@@ -353,88 +365,58 @@ $("generate").onclick = async () => {
   }
 };
 
-/* === Mẫu bài: cấu trúc thông dụng cho ban nhạc === */
-const TEMPLATES = [
-  { label: "Bài hát phổ thông", desc: "Intro · Verse · Chorus · Verse · Chorus · Bridge · Chorus · Outro",
-    secs: [["Intro", 4], ["Verse", 8], ["Chorus", 8], ["Verse", 8], ["Chorus", 8], ["Bridge", 4], ["Chorus", 8], ["Outro", 4]] },
-  { label: "Vòng lặp Verse–Chorus", desc: "Verse ×3 + Chorus ×3 (tập chuyển đoạn)",
-    secs: [["Verse", 8], ["Chorus", 8], ["Verse", 8], ["Chorus", 8], ["Verse", 8], ["Chorus", 8]] },
-  { label: "12-bar blues", desc: "12 vòng 12-bar, đếm vào 1 bar",
-    secs: Array.from({ length: 12 }, (_, i) => [`Vòng ${i + 1}`, 12]) },
-  { label: "Ballad chậm", desc: "Intro · Verse · Chorus · Solo · Outro",
-    secs: [["Intro", 8], ["Verse", 16], ["Chorus", 16], ["Solo", 8], ["Outro", 8]] },
-];
-function applyTemplate(t) {
-  const bpm = baseBpm(), sig = baseSig() || SIGS[2];
-  if (!bpm || !sig) {
-    $("status").className = "err";
-    $("status").textContent = "Hãy nhập BPM và chọn loại nhịp trước khi áp dụng mẫu.";
-    $("base-bpm").focus();
-    return;
-  }
-  $("status").textContent = "";
-  sections = t.secs.map(([name, bars]) => ({ ...makeSection(name), bars }));
-  render();
-  saveDraft();
-}
-const tplMenu = $("tpl-menu");
-tplMenu.innerHTML = TEMPLATES.map((t, i) =>
-  `<button data-t="${i}"><b>${esc(t.label)}</b><span>${esc(t.desc)}</span></button>`).join("");
-$("tpl").addEventListener("click", (e) => {
-  e.stopPropagation();
-  tplMenu.hidden = !tplMenu.hidden;
-});
-tplMenu.addEventListener("click", (e) => {
-  const b = e.target.closest("[data-t]");
-  if (!b) return;
-  applyTemplate(TEMPLATES[Number(b.dataset.t)]);
-  tplMenu.hidden = true;
-});
-document.addEventListener("click", (e) => {
-  if (!tplMenu.hidden && !e.target.closest("#tpl-menu") && !e.target.closest("#tpl")) tplMenu.hidden = true;
-});
+/* === JSON cấu trúc bài: dán vào lúc tạo bài mới + xuất từ menu chuột phải lịch sử === */
+const jsonName = (title) => `${(title || "bai-hat").replace(/[^\w\-]+/g, "_").slice(0, 50)}_structure.json`;
 
-/* === Xuất / nhập cấu trúc bài dạng JSON (chia sẻ với ban nhạc) === */
-$("export-json").addEventListener("click", () => {
+function downloadJson(title, data) {
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([JSON.stringify({
-    app: "band-metronome", version: 1, title: activeTitle,
-    base: { bpm: baseBpm(), time_signature: baseSig(), sample_rate: Number($("base-srate").value) },
-    sections,
-  }, null, 2)], { type: "application/json" }));
-  a.download = `${(activeTitle || "bai-hat").replace(/[^\w\-]+/g, "_").slice(0, 50)}_structure.json`;
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  a.download = jsonName(title);
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+/* {title?, base?, sections:[{name,bpm,bars,time_signature,count_in,count_out,read_marker}]} */
+const songJson = (title, secs, rate) => ({
+  app: "band-metronome", version: 1, title,
+  base: { bpm: secs[0]?.bpm ?? null, time_signature: secs[0]?.time_signature ?? "4/4",
+          sample_rate: Number(rate) || Number($("base-srate").value) },
+  sections: secs,
 });
-$("import-json").addEventListener("click", () => $("import-file").click());
-$("import-file").addEventListener("change", async () => {
-  const f = $("import-file").files[0];
-  $("import-file").value = "";
-  if (!f) return;
+
+function parseSongJson(text) {
+  if (!text.trim()) throw new Error("Chưa dán nội dung JSON vào khung.");
+  const data = JSON.parse(text);
+  const src = Array.isArray(data.sections) ? data.sections : Array.isArray(data) ? data : null;
+  if (!src || !src.length) throw new Error("JSON không có mảng sections hợp lệ.");
+  if (src.length > 100) throw new Error("Tối đa 100 đoạn.");
+  /* đoạn bỏ trống time_signature → lấy theo base, cuối cùng mới đến 4/4 */
+  const baseTs = SIGS.includes(String(data.base?.time_signature)) ? String(data.base.time_signature) : "4/4";
+  const out = src.map((s, i) => {
+    const bpm = Number(s.bpm), bars = Math.round(Number(s.bars));
+    const ts = SIGS.includes(String(s.time_signature)) ? String(s.time_signature) : baseTs;
+    if (!(bpm >= 20 && bpm <= 400)) throw new Error(`Đoạn ${i + 1}: BPM phải từ 20 đến 400.`);
+    if (!(bars >= 1 && bars <= 128)) throw new Error(`Đoạn ${i + 1}: số bar phải từ 1 đến 128.`);
+    return { name: String(s.name || `Section ${i + 1}`).slice(0, 60), bpm, bars, time_signature: ts,
+             count_in: Boolean(s.count_in), count_out: Boolean(s.count_out),
+             read_marker: s.read_marker !== false };
+  });
+  return { sections: out, base: data.base || null, title: data.title ? String(data.title).slice(0, 120) : "" };
+}
+
+/* Xuất JSON của một bài trong lịch sử (menu chuột phải) */
+async function exportHistoryJson(id) {
   const st = $("status");
   try {
-    const data = JSON.parse(await f.text());
-    const src = Array.isArray(data.sections) ? data.sections : Array.isArray(data) ? data : null;
-    if (!src || !src.length) throw new Error("JSON không có mảng sections hợp lệ.");
-    if (src.length > 100) throw new Error("Tối đa 100 đoạn.");
-    const out = src.map((s, i) => {
-      const bpm = Number(s.bpm), bars = Math.round(Number(s.bars));
-      const ts = SIGS.includes(String(s.time_signature)) ? String(s.time_signature) : "4/4";
-      if (!(bpm >= 20 && bpm <= 400)) throw new Error(`Đoạn ${i + 1}: BPM phải từ 20 đến 400.`);
-      if (!(bars >= 1 && bars <= 128)) throw new Error(`Đoạn ${i + 1}: số bar phải từ 1 đến 128.`);
-      return { name: String(s.name || `Section ${i + 1}`).slice(0, 60), bpm, bars, time_signature: ts,
-               count_in: Boolean(s.count_in), count_out: Boolean(s.count_out),
-               read_marker: s.read_marker !== false };
-    });
-    sections = out;
-    if (data.base) setBase(data.base.bpm, data.base.time_signature, data.base.sample_rate);
-    render();
-    saveDraft();
-    st.className = "ok"; st.textContent = `Đã nhập ${out.length} đoạn từ JSON.`;
-  } catch (e) {
-    st.className = "err"; st.textContent = `Nhập JSON thất bại: ${e.message}`;
-  }
-});
+    const d = await (await api(`/api/history/${id}`)).json();
+    if (!Array.isArray(d.sections) || !d.sections.length) {
+      st.className = "err"; st.textContent = "Bài này chưa có cấu trúc đoạn nào để xuất.";
+      return;
+    }
+    downloadJson(d.title || "Bài hát chưa có tiêu đề", songJson(d.title || "", d.sections, d.sample_rate));
+    st.className = "ok"; st.textContent = `Đã xuất cấu trúc của “${d.title || "Bài hát chưa có tiêu đề"}” ra JSON.`;
+  } catch { st.className = "err"; st.textContent = "Không xuất được JSON."; }
+}
 
 /* === Lịch sử bài hát (sqlite) === */
 let activeHistoryId = null;
@@ -442,25 +424,40 @@ let activeHistoryId = null;
 const histItemHTML = (h) => `
   <li class="hist ${h.id === activeHistoryId ? "active" : ""}">
     <button data-hid="${h.id}" class="hist-open" title="Bấm mở bài · chuột phải / ⋮: đổi tên / tải / xoá">
-      <span class="hist-title">${esc(h.title || "Bài hát mới")}</span>
+      <span class="hist-title">${esc(h.title || "Bài hát chưa có tiêu đề")}</span>
       <span class="hist-meta">${esc(h.created_at)} · ${fmt(h.duration)}${h.file_exists ? "" : h.filename ? " · file đã xoá" : " · nháp"}</span>
     </button>
     <button data-hid="${h.id}" class="hist-kebab" aria-label="Tuỳ chọn bài hát">⋮</button>
   </li>`;
 
-async function loadHistory() {
-  try {
-    const d = await (await api("/api/history")).json();
-    $("history-list").innerHTML = d.map(histItemHTML).join("");
-  } catch { /* im lặng khi chưa có server */ }
+let histItems = [];                       /* danh sách đã tải, để lọc tại chỗ không gọi lại server */
+/* bỏ dấu + thường hoá để "dat phuong" vẫn tìm ra "Đất phương nam" */
+const fold = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase().replace(/đ/g, "d").trim();
+
+function renderHistoryList() {
+  const q = fold($("hist-search-input").value);
+  const shown = q ? histItems.filter((h) => fold(h.title).includes(q)) : histItems;
+  $("history-list").innerHTML = shown.map(histItemHTML).join("")
+    + (shown.length || !q ? "" : '<li class="hist-empty">Không tìm thấy kết quả nào</li>');
 }
 
-/* Phát / dừng bản ghi của một bài */
-function playAudio(src) {
+async function loadHistory() {
+  try {
+    histItems = await (await api("/api/history")).json();
+    renderHistoryList();
+  } catch { /* im lặng khi chưa có server */ }
+}
+$("hist-search-input").addEventListener("input", renderHistoryList);
+
+/* Nạp bản ghi của một bài vào thanh phát — KHÔNG tự phát: mở bài từ lịch sử là để
+   người dùng tự bấm ▶ (phím Space cũng được). */
+function showRecording(src) {
   $("result").hidden = false;
   preview.src = src;
-  preview.play().catch(() => {});
   $("dl").href = `${src.replace("/stream/", "/download/")}?title=${encodeURIComponent(activeTitle)}`;
+  setPlayIcon();
+  timeLabel();
 }
 function stopAudio() {
   preview.pause();
@@ -472,26 +469,47 @@ function stopAudio() {
   updateProgress();
 }
 
+/* Ô BPM/Nhịp/Xuất ở header không có cột riêng trong DB: BPM + Nhịp suy ra từ đoạn
+   đầu (bar lead cũng lấy theo đoạn đầu), sample rate đọc từ bài vừa mở. */
+const syncBase = (secs, rate) => {
+  const f = secs && secs[0];
+  if (!f) return;
+  setBase(Number(f.bpm) || null, f.time_signature, rate);
+};
+
+/* Chữ ký cấu trúc đã chuẩn hoá: server trả bpm dạng 96.0, nháp lưu 96 → so trực tiếp sẽ lệch */
+const secKey = (secs) => JSON.stringify((secs || []).map((s) => [
+  String(s.name ?? ""), Number(s.bpm) || 0, Number(s.bars) || 0, String(s.time_signature ?? ""),
+  Boolean(s.count_in), Boolean(s.count_out), s.read_marker !== false,
+]));
+
 /* Mở lại một bài từ lịch sử: khôi phục soạn thảo + phát bản ghi nếu còn */
 async function openHistory(id) {
   const st = $("status");
   try {
     const d = await (await api(`/api/history/${id}`)).json();
     const dr = draftOf(d.id);               /* nháp chưa sinh nằm ở localStorage */
-    if (dr && dr.dirty && (!d.filename || dr.ts > (d.generated_ts || 0))
-        && confirm(`“${d.title || "Bài hát mới"}” có nháp chưa tạo metronome (lưu lúc ${new Date(dr.ts).toLocaleString()}). Khôi phục nháp?`)) {
+    const hasDraft = dr && dr.dirty && secKey(dr.state?.sections) !== secKey(d.sections)
+      && (!d.filename || dr.ts > (d.generated_ts || 0));
+    /* đang mở đúng bài này với nháp của nó (tự khôi phục lúc tải trang) → khỏi hỏi lại */
+    if (hasDraft && (activeHistoryId === d.id || confirm(`“${d.title || "Bài hát chưa có tiêu đề"}” có nháp chưa tạo metronome (lưu lúc ${new Date(dr.ts).toLocaleString()}). Khôi phục nháp?`))) {
       activeHistoryId = d.id;
       loadDraftState(dr);
+      if (!baseBpm()) syncBase(sections, d.sample_rate);
     } else {
       dropDraft(d.id);
-      if (Array.isArray(d.sections) && d.sections.length) sections = d.sections;
+      if (Array.isArray(d.sections) && d.sections.length) {
+        sections = d.sections;
+        syncBase(sections, d.sample_rate);
+        unsaved = false;                    /* vừa nạp đúng bản trên server → không còn nháp */
+      }
       activeHistoryId = d.id;
-      activeTitle = d.title || "Bài hát mới";
+      activeTitle = d.title || "Bài hát chưa có tiêu đề";
       render();
     }
     loadHistory();
     if (d.file_exists) {
-      playAudio(`/stream/${d.filename}`);
+      showRecording(`/stream/${d.filename}`);
       st.className = "ok"; st.textContent = `Đã mở lại “${activeTitle}” từ lịch sử.`;
     } else {
       stopAudio();
@@ -500,49 +518,84 @@ async function openHistory(id) {
   } catch { st.className = "err"; st.textContent = "Không tải được bài từ lịch sử."; }
 }
 
-/* === Modal nhập tên (dùng cho tạo mới + đổi tên) === */
+/* === Modal nhập tên (+ dán JSON khi tạo bài mới) === */
 let nameCallback = null;
-function openNameModal({ heading, value = "", requireText, onOk }) {
+const importBox = $("import-box");
+const setImportOpen = (open) => {
+  importBox.hidden = !open;
+  $("name-import").textContent = open ? "Ẩn JSON ▴" : "Nhập JSON ▾";
+  if (!open) $("import-err").hidden = true;
+};
+function openNameModal({ heading, value = "", requireText, okLabel = "Xác nhận", allowImport = false, onOk }) {
   $("name-heading").textContent = heading;
   $("name-input").value = value;
+  $("name-ok").textContent = okLabel;
   $("name-hint").textContent = requireText ? "Hãy đặt tên cho bài hát." : "";
   $("name-hint").hidden = true;
+  $("name-import").hidden = !allowImport;
+  $("import-text").value = "";
+  setImportOpen(false);
   nameCallback = onOk;
   $("name-modal").hidden = false;
   setTimeout(() => $("name-input").focus(), 0);
 }
 function closeNameModal() { $("name-modal").hidden = true; nameCallback = null; }
+$("name-import").addEventListener("click", () => {
+  setImportOpen(importBox.hidden);
+  if (!importBox.hidden) $("import-text").focus();
+});
 $("name-ok").addEventListener("click", () => {
   const v = $("name-input").value.trim();
   if (!v && $("name-hint").textContent) { $("name-hint").hidden = false; $("name-input").focus(); return; }
-  nameCallback && nameCallback(v || "Bài hát mới");
+  let imported = null;
+  if (!importBox.hidden) {
+    const err = $("import-err");
+    try {
+      imported = parseSongJson($("import-text").value);
+      err.hidden = true;
+    } catch (e) {
+      err.hidden = false;
+      err.textContent = `JSON chưa hợp lệ: ${e.message}`;
+      $("import-text").focus();
+      return;
+    }
+  }
+  nameCallback && nameCallback(v || "Bài hát chưa có tiêu đề", imported);
   closeNameModal();
 });
 $("name-cancel").addEventListener("click", closeNameModal);
 $("name-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("name-ok").click(); });
 $("name-modal").addEventListener("keydown", (e) => { if (e.key === "Escape") closeNameModal(); });
 
-/* Tạo bài mới: đặt tên ngay → mục lịch sử tạo luôn, nút “Tạo metronome” chỉ ghi đè */
+/* Tạo bài mới: đặt tên (+ dán cấu trúc JSON) → mục lịch sử tạo luôn, nút “Tạo metronome” chỉ ghi đè */
 function createDraft() {
   openNameModal({
-    heading: "Tạo bài hát mới", requireText: true,
-    onOk: async (name) => {
+    heading: "Tạo bài hát mới", requireText: false, okLabel: "Tạo mới", allowImport: true,
+    onOk: async (name, imported) => {
       const st = $("status");
       try {
         const r = await api("/api/history", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: name }) });
-        if (!r.ok) throw new Error();
+          body: JSON.stringify({ title: name, sections: imported ? imported.sections : [] }) });
+        if (!r.ok) throw new Error((await r.json()).error || "");
         const d = await r.json();
         activeHistoryId = d.id;
         activeTitle = name;
-        sections = [makeSection("Intro")];
+        if (imported) {
+          sections = imported.sections;
+          syncBase(sections, imported.base?.sample_rate);
+        } else {
+          sections = [makeSection("Intro")];
+        }
         dropDraft("new");                   /* nháp của bài chưa lưu trước đó không còn liên quan */
+        unsaved = false;                    /* cấu trúc vừa tạo đã nằm trên DB → chưa có gì phải khôi phục */
         $("gate").hidden = true;
         stopAudio();
         render();
         loadHistory();
-        st.className = "ok"; st.textContent = `Đã tạo “${name}” — dựng các đoạn rồi bấm “Tạo metronome”.`
-      } catch { st.className = "err"; st.textContent = "Không tạo được bài mới."; }
+        st.className = "ok"; st.textContent = `Đã tạo “${name}”${imported ? ` với ${sections.length} đoạn từ JSON` : ""} — dựng các đoạn rồi bấm “Tạo metronome”.`;
+      } catch (e) {
+        st.className = "err"; st.textContent = e.message ? `Không tạo được bài mới: ${e.message}` : "Không tạo được bài mới.";
+      }
     },
   });
 }
@@ -551,7 +604,7 @@ $("hist-new").addEventListener("click", createDraft);
 
 /* Đổi tên một bài trong lịch sử */
 async function renameHistory(id) {
-  let current = "Bài hát mới";
+  let current = "Bài hát chưa có tiêu đề";
   try { current = (await (await api(`/api/history/${id}`)).json()).title || current; } catch {}
   openNameModal({
     heading: "Đổi tên bài hát", value: current,
@@ -577,7 +630,7 @@ async function downloadHistory(id) {
       return;
     }
     const a = document.createElement("a");
-    a.href = `/download/${d.filename}?title=${encodeURIComponent(d.title || "Bài hát mới")}`;
+    a.href = `/download/${d.filename}?title=${encodeURIComponent(d.title || "Bài hát chưa có tiêu đề")}`;
     document.body.appendChild(a); a.click(); a.remove();
   } catch { st.className = "err"; st.textContent = "Không tải được file."; }
 }
@@ -615,13 +668,14 @@ ctx.addEventListener("click", (e) => {
   ctx.hidden = true;
   if (act.dataset.act === "rename") renameHistory(id);
   else if (act.dataset.act === "download") downloadHistory(id);
+  else if (act.dataset.act === "export") exportHistoryJson(id);
   else if (act.dataset.act === "delete") deleteHistory(id);
 });
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#ctx-menu") && !e.target.closest(".hist-kebab")) ctx.hidden = true;
 });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { ctx.hidden = true; tplMenu.hidden = true; closeNameModal(); }
+  if (e.key === "Escape") { ctx.hidden = true; closeNameModal(); }
 });
 
 async function deleteHistory(id) {
@@ -658,6 +712,8 @@ async function showGate() {
 
 /* Đổ lựa chọn loại nhịp cho ô ở header */
 $("base-sig").innerHTML = SIGS.map((t) => `<option ${t === SIGS[2] ? "selected" : ""}>${t}</option>`).join("");
+/* Gợi ý tên đoạn cho ô "Tên đoạn" của mọi session */
+$("name-suggestions").innerHTML = SECTION_NAMES.map((n) => `<option value="${esc(n)}"></option>`).join("");
 /* Chuẩn đầu ra mặc định: 48 kHz */
 $("base-srate").innerHTML = RATES.map(([v, t]) => `<option value="${v}" ${v === "48000" ? "selected" : ""}>${t}</option>`).join("");
 

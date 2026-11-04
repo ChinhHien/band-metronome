@@ -22,17 +22,46 @@
   </div>
 </div>
 
-<!-- Modal đặt tên bài hát -->
+<!-- Modal đặt tên bài hát (+ dán cấu trúc JSON khi tạo mới) -->
 <div id="name-modal" hidden>
   <div class="gate-card">
     <h2 id="name-heading">Tạo bài hát mới</h2>
     <label class="name-field">Tên bài hát
-      <input id="name-input" maxlength="120" placeholder="VD: Nhật Ký Tuổi Thơ (Live)">
+      <input id="name-input">
     </label>
     <p id="name-hint" class="err-hint" hidden>Hãy đặt tên cho bài hát.</p>
+
+    <div id="import-box" hidden>
+      <p class="import-help">Dán cấu trúc bài dạng JSON. Chỉ <code>sections</code> là bắt buộc;
+        <code>title</code>, <code>base</code> và các mục <code>count_*</code> có thể bỏ trống.</p>
+<pre class="import-schema">{
+  "title": "Tên bài",
+  "base": { "bpm": 120, "time_signature": "4/4", "sample_rate": 48000 },
+  "sections": [
+    { "name": "Intro",  "bpm": 120, "bars": 4, "time_signature": "4/4",
+      "count_in": true, "count_out": true, "read_marker": true },
+    { "name": "Chorus", "bpm": 120, "bars": 8 }
+  ]
+}</pre>
+      <ul class="import-rules">
+        <li><code>sections</code> — 1 đến 100 đoạn.</li>
+        <li><code>bpm</code> — số, 20 đến 400.</li>
+        <li><code>bars</code> — số nguyên, 1 đến 128.</li>
+        <li><code>name</code> — tối đa 60 ký tự.</li>
+        <li><code>time_signature</code> — 2/4 3/4 4/4 5/4 6/8 7/8 9/8 12/8 (bỏ trống thì lấy theo <code>base</code>, nếu không có nữa thì 4/4).</li>
+        <li><code>count_in</code> <code>count_out</code> <code>read_marker</code> — true/false (mặc định chỉ <code>read_marker</code> là true).</li>
+      </ul>
+      <label class="name-field">JSON cấu trúc bài
+        <textarea id="import-text" rows="9" spellcheck="false" autocomplete="off"
+          placeholder='{"sections":[{"name":"Verse","bpm":90,"bars":8,"time_signature":"4/4"}]}'></textarea>
+      </label>
+      <p id="import-err" class="err-hint" hidden></p>
+    </div>
+
     <div class="modal-actions">
+      <button id="name-import" class="ghost" hidden>Nhập JSON ▾</button>
       <button id="name-cancel" class="ghost">Huỷ</button>
-      <button id="name-ok">Xác nhận</button>
+      <button id="name-ok">Tạo mới</button>
     </div>
   </div>
 </div>
@@ -41,6 +70,7 @@
 <div id="ctx-menu" hidden>
   <button data-act="rename"><svg viewBox="0 0 16 16"><path d="M11.5 2.5l2 2-8 8h-2v-2l8-8z"/></svg>Đổi tên…</button>
   <button data-act="download"><svg viewBox="0 0 16 16"><path d="M8 2.5v7.5m0 0L5 7m3 3l3-3M3.5 12.5h9"/></svg>Tải xuống</button>
+  <button data-act="export"><svg viewBox="0 0 16 16"><path d="M8 10.5V3m0 0L5 6m3-3l3 3M3.5 12.5h9"/></svg>Xuất JSON</button>
   <button data-act="delete"><svg viewBox="0 0 16 16"><path d="M3 4.5h10M6 4.5V3h4v1.5M4.5 4.5l.7 9h5.6l.7-9"/></svg>Xoá</button>
 </div>
 
@@ -48,8 +78,16 @@
 
   <!-- Cột lịch sử bài hát (giống lịch sử chat) -->
   <aside id="history-panel">
-    <h2>Lịch sử bài hát</h2>
-    <button id="hist-new" class="ghost">＋ Tạo bài mới</button>
+    <div class="hist-head">
+      <h2>Lịch sử bài hát</h2>
+      <button id="hist-new" class="icon-new" aria-label="Tạo bài hát mới" title="Tạo bài hát mới">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg>
+      </button>
+    </div>
+    <label class="hist-search">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2L13.5 13.5"/></svg>
+      <input id="hist-search-input" type="search" placeholder="Tìm bài hát…" aria-label="Tìm bài hát">
+    </label>
     <ul id="history-list"></ul>
   </aside>
 
@@ -79,20 +117,19 @@
     <p id="total" class="muted"></p>
 
     <ol id="sections"></ol>
+    <datalist id="name-suggestions"></datalist>
 
     <div class="actions">
       <button id="add" class="ghost">＋ Thêm đoạn</button>
-      <button id="tpl" class="ghost" aria-haspopup="true">Mẫu bài ▾</button>
-      <button id="export-json" class="ghost">Xuất JSON</button>
-      <button id="import-json" class="ghost">Nhập JSON</button>
-      <input id="import-file" type="file" accept=".json,application/json" hidden>
       <button id="generate">Tạo metronome</button>
     </div>
-    <div id="tpl-menu" hidden></div>
 
     <p id="status" role="status"></p>
   </main>
 </div>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
+<!-- Tính năng tuỳ chọn "AI đọc bố cục": đổi dòng include dưới thành
+     {# _ai_layout.html #} (hoặc xoá) là gỡ toàn bộ UI, không ảnh hưởng gì khác. -->
+{% include '_ai_layout.html' %}
 </body>
 </html>

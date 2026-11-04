@@ -68,7 +68,8 @@ def init_db():
             created_at TEXT    NOT NULL,
             sections   TEXT    NOT NULL)""")
         for ddl in ("ALTER TABLE history ADD COLUMN updated_at TEXT",
-                    "ALTER TABLE history ADD COLUMN owner TEXT NOT NULL DEFAULT ''"):
+                    "ALTER TABLE history ADD COLUMN owner TEXT NOT NULL DEFAULT ''",
+                    "ALTER TABLE history ADD COLUMN sample_rate INTEGER"):
             try:                                    # DB cũ chưa có cột
                 con.execute(ddl)
             except sqlite3.OperationalError:
@@ -77,6 +78,18 @@ def init_db():
 
 
 init_db()
+
+
+# --- Tính năng tuỳ chọn: AI đọc bố cục bài hát (module tách riêng ai_layout/) ---
+# Điểm nối duy nhất vào module ai_layout/. Thiếu module, thiếu `openai` hay
+# chưa bật AI_LAYOUT_ENABLED cũng chỉ mất tính năng phụ này — app chính vẫn chạy.
+# Server không giữ API key: key/model do từng thiết bị gửi kèm request từ trình duyệt.
+try:
+    from ai_layout import register as _register_ai_layout
+    _register_ai_layout(app)
+    log.info("ai_layout gan /api/ai/*")
+except Exception as _e:                                   # noqa: BLE001
+    log.warning("ai_layout khong san sang: %s", _e)
 
 
 def _enforce_disk_cap():
@@ -122,20 +135,43 @@ def _rate_ok(ip):
 
 
 def _estimate_seconds(sections):
-    """Thời lượng xấp xỉ (bỏ bar đếm vào bị hút sang đoạn trước) — cùng công thức với UI."""
+    """Thời lượng xấp xỉ file WAV sẽ render — khớp đúng công thức của assembler.
+
+    Bar đếm vào/đếm chuyển KHÔNG cộng thêm (chúng mượn bar đã có), chỉ có 1 bar dẫn
+    đầu bài là nằm ngoài bài hát. Ước lượng này dùng để chặn MAX_SONG_SECONDS trước
+    khi tốn công render.
+    """
     total = 0.0
-    for i, s in enumerate(sections):
+    for s in sections:
         num = int(str(s.get("time_signature", "4/4")).split("/")[0])
-        nxt = sections[i + 1] if i + 1 < len(sections) else None
-        absorbed = bool(s.get("count_out") and nxt and nxt.get("count_in"))
-        ci = 1 if (s.get("count_in") and not absorbed) else 0
-        total += (int(s["bars"]) + ci) * num * 60 / float(s["bpm"])
-    return total
+        total += int(s["bars"]) * num * 60 / float(s["bpm"])
+    first = sections[0]
+    num0 = int(str(first.get("time_signature", "4/4")).split("/")[0])
+    return total + num0 * 60 / float(first["bpm"])
 
 
 @app.get("/")
 def index():
     return render_template("index.html")
+
+
+# CSP: then so nội dung chèn vào HTML (kể cả khi một lỗi escape nào đó lọt qua) không
+# lấy được API key mà người dùng dán trong panel AI — key đi trên mỗi request.
+# 'unsafe-inline' cho style là cần vì thanh tiến trình đặt màu/flex qua thuộc tính style=""
+# của từng đoạn; script thì KHÔNG có inline (mọi JS đều là file riêng).
+CSP = ("default-src 'self'; script-src 'self'; "
+       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+       "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self' blob:; "
+       "connect-src 'self'; object-src 'none'; frame-ancestors 'none'; "
+       "base-uri 'self'; form-action 'self'")
+
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers["Content-Security-Policy"] = CSP
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Referrer-Policy"] = "same-origin"
+    return resp
 
 
 @app.get("/healthz")
@@ -191,9 +227,10 @@ def _render_and_store(job, song, filename, gen_ts, owner):
         with closing(db()) as con, con:
             row = con.execute("SELECT id, title, filename, owner FROM history WHERE id=?", (hid,)).fetchone() if hid else None
             if row and owner and row["owner"] in (owner, ""):
-                con.execute("UPDATE history SET filename=?, duration=?, sections=?, updated_at=?, owner=? WHERE id=?",
+                con.execute("UPDATE history SET filename=?, duration=?, sections=?, updated_at=?, owner=?, sample_rate=? WHERE id=?",
                             (filename, info["duration"],
-                             json.dumps(song.get("sections") or [], ensure_ascii=False), gen_ts, owner, row["id"]))
+                             json.dumps(song.get("sections") or [], ensure_ascii=False), gen_ts, owner,
+                             int(song.get("sample_rate") or 0) or None, row["id"]))
                 if row["filename"] != filename:        # thay bản ghi cũ của chính bài này
                     old = os.path.join(OUT, row["filename"])
                     if NAME_RE.match(row["filename"]) and os.path.isfile(old):
@@ -277,15 +314,24 @@ def history_list():
 
 @app.post("/api/history")
 def history_create():
-    """Tạo bài nháp làm mục lịch sử mới (dùng nút "＋ Tạo bài mới")."""
+    """Tạo bài nháp làm mục lịch sử mới (dùng nút "＋ Tạo bài mới").
+
+    Kèm `sections` khi bài tạo từ JSON dán trên web — làm sạch bằng validate()
+    nên cấu trúc lưu xuống đúng chuẩn engine render."""
     data = request.get_json(silent=True) or {}
-    title = (str(data.get("title") or "").strip() or "Bài hát mới")[:120]
+    title = (str(data.get("title") or "").strip() or "Bài hát chưa có tiêu đề")[:120]
+    raw = data.get("sections")
+    try:
+        sections = validate({"sections": raw}) if raw else []
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
     with closing(db()) as con, con:
         cur = con.execute(
             "INSERT INTO history(title, filename, duration, created_at, sections, updated_at, owner) "
             "VALUES(?,?,?,?,?,?,?)",
-            (title, "", 0.0, datetime.now().strftime("%Y-%m-%d %H:%M"), "[]", "", _owner()))
-        return jsonify(id=cur.lastrowid), 201
+            (title, "", 0.0, datetime.now().strftime("%Y-%m-%d %H:%M"),
+             json.dumps(sections, ensure_ascii=False), "", _owner()))
+        return jsonify(id=cur.lastrowid, sections=sections), 201
 
 
 def _row_for(hid, owner, write=False):
@@ -295,7 +341,7 @@ def _row_for(hid, owner, write=False):
     thiết bị ghi đầu tiên sẽ nhận nó làm của mình thay vì bị chặn.
     """
     with closing(db()) as con:
-        row = con.execute("SELECT id, title, filename, duration, sections, updated_at, owner "
+        row = con.execute("SELECT id, title, filename, duration, sections, updated_at, owner, sample_rate "
                           "FROM history WHERE id=?", (hid,)).fetchone()
     if row is None or row["owner"] not in (owner, ""):
         abort(404)
@@ -321,6 +367,7 @@ def history_get(hid):
             ts = None
     return jsonify(id=row["id"], title=row["title"], filename=row["filename"],
                    duration=row["duration"], sections=sections, generated_ts=ts,
+                   sample_rate=row["sample_rate"],
                    file_exists=bool(row["filename"]) and os.path.isfile(os.path.join(OUT, row["filename"])))
 
 
@@ -328,7 +375,7 @@ def history_get(hid):
 def history_rename(hid):
     """Đổi tên bài hát (menu trong lịch sử)."""
     data = request.get_json(silent=True) or {}
-    title = (str(data.get("title") or "").strip() or "Bài hát mới")[:120]
+    title = (str(data.get("title") or "").strip() or "Bài hát chưa có tiêu đề")[:120]
     owner = _owner()
     _row_for(hid, owner, write=True)
     with closing(db()) as con, con:

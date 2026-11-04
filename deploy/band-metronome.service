@@ -37,7 +37,8 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictNamespaces=yes
 SystemCallFilter=@system-service
 # Trần RAM: bài 30 phút @48 kHz đỉnh ~0,9 GB (float32 + bản concatenate),
-# MAX_JOBS=2 -> ~1,8 GB. Đặt 4G để lỗi lộ trình không làm sập cả VM 12 GB.
+# MAX_JOBS=2 -> ~1,8 GB. Trên laptop nên hạ MAX_SONG_SECONDS xuống 600 nếu máy
+# chỉ có 8 GB RAM; trần này để lỗi lộ trình không làm treo cả máy.
 MemoryMax=4G
 # Bỏ comment nếu TTS (espeak-ng) không ghi được file tạm:
 # PrivateTmp=no

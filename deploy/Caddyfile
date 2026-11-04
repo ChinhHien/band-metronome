@@ -1,42 +1,30 @@
-# Caddyfile — copy tới /etc/caddy/Caddyfile rồi `systemctl reload caddy`
-# Caddy tự xin + tự gia hạn chứng chỉ Let's Encrypt (ACME HTTP-01, cần port 80 mở).
-# Thay <ten>.duckdns.org bằng subdomain DuckDNS của bạn ở CẢ HAI site block.
+# Caddyfile — Band Metronome tự host trên Ubuntu.
+# setup-ubuntu.sh thay domain trong file này bằng biến DOMAIN.
+#
+# MODE A (mặc định, máy có IP công cộng + port 80/443 tới được từ internet):
+#   Caddy tự xin & gia hạn chứng chỉ Let's Encrypt qua ACME HTTP-01.
+# MODE B (đằng sau Cloudflare Tunnel — dùng khi ISP chặn/không có port mở):
+#   đổi dòng site thành  :8080 {   và chạy
+#   cloudflared tunnel --url http://127.0.0.1:8080
+#   (browser <-> Cloudflare là HTTPS; Cloudflare <-> máy bạn đi trong tunnel đã mã hoá)
 
-{
-	# email để Let's Encrypt báo chứng chỉ sắp hết hạn (tuỳ chọn nhưng nên điền)
-	email you@example.com
-}
-
-# HTTP: ép về HTTPS, ngoại trừ ACME challenge mà Caddy tự xử lý
-http://<ten>.duckdns.org {
-	redir https://{host}{uri} 308
-}
-
-https://<ten>.duckdns.org {
+band-metronome.lichinhhien.id.vn {
 	encode zstd gzip
 
-	# app chỉ có JS/CSS cùng origin + Google Fonts; không cần nới thêm
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		X-Content-Type-Options nosniff
-		X-Frame-Options DENY
-		Referrer-Policy same-origin
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
-	}
+	# app.py đã tự gởi Content-Security-Policy + nosniff + Referrer-Policy cho mọi
+	# response (smoke_test.py kiểm tra). Caddy KHÔNG đặt lại: hai header CSP cùng lúc
+	# sẽ bị trình duyệt ép đồng thời cả hai, dễ làm hỏng tính năng.
+	# Caddy chỉ thêm phần mà app không tự có: bắt buộc HTTPS.
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
-	# body đã có trần ở Flask (MAX_BODY_KB) — chặn sớm ở edge cho đỡ tốn tiến trình
+	# Flask đã có trần MAX_BODY_KB; chặn sớm ở edge cho đỡ tốn tiến trình
 	request_body {
 		max_size 1MB
 	}
 
-	handle {
-		# WAV 60 MB + render có thể kéo dài -> không cắt sớm hơn timeout của gunicorn.
-		# Caddy tự thêm X-Forwarded-For/Proto; ProxyFix(x_for=1, x_proto=1) trong app.py
-		# đọc giá trị rightmost nên IP dùng làm rate-limit là IP thật của khách.
-		reverse_proxy 127.0.0.1:8000
-	}
+	# Caddy tự thêm X-Forwarded-For; ProxyFix(x_for=1) trong app.py lấy giá trị rightmost
+	# -> IP mà rate-limit nhìn thấy là IP thật của khách.
+	reverse_proxy 127.0.0.1:8000
 }
 
-# Log truy cập: Caddy ghi stdout -> journald. Debug: journalctl -u caddy -f
-# (muốn ra file thì thêm block `log { output file /var/log/caddy/access.log }`
-#  sau khi chắc chắn thư mục đó tồn tại và Caddy có quyền ghi)
+# Log: Caddy ghi stdout -> journalctl -u caddy -f

@@ -13,7 +13,7 @@ backups/
 
 # --- secrets / biến máy chủ ---
 .env
-/etc-secrets/
+ai.env
 deploy/duckdns.env
 
 # --- linh tinh ---
@@ -21,3 +21,13 @@ deploy/duckdns.env
 .DS_Store
 .idea/
 .vscode/
+
+# --- audio mẫu để thử tính năng AI (vài chục MB, không commit) ---
+/*.mp3
+/*.m4a
+/*.wav
+/*.ogg
+/*.flac
+
+# --- script kiểm tra tạm khi dev ---
+/_tmp_*

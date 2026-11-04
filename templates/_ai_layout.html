@@ -1,0 +1,79 @@
+{# Tính năng AI đọc bố cục bài hát.
+   Bỏ comment dòng `include` trong templates/index.html là mất toàn bộ UI
+   (nút ✨, panel, CSS, JS). Server còn một khoá nữa: AI_LAYOUT_ENABLED.
+   Key/model là của từng thiết bị, lưu trong localStorage — không có secret ở server. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='ai_layout.css') }}">
+
+<div id="ai-panel" hidden role="dialog" aria-modal="true" aria-labelledby="ai-title">
+  <div class="ai-card">
+    <h3 id="ai-title">Đọc bố cục bằng AI</h3>
+
+    <!-- Cấu hình model của RIÊNG thiết bị này -->
+    <div id="ai-cfg" class="ai-cfg" hidden>
+      <label class="ai-field">Base URL
+        <input id="ai-cfg-base" type="url" spellcheck="false" autocomplete="off"
+               placeholder="https://…/v1">
+      </label>
+      <label class="ai-field">Model
+        <input id="ai-cfg-model" spellcheck="false" autocomplete="off"
+               placeholder="tên model hỗ trợ âm thanh">
+      </label>
+      <label class="ai-field">API key
+        <input id="ai-cfg-key" type="password" spellcheck="false" autocomplete="off"
+               placeholder="dán key vào đây">
+      </label>
+      <p id="ai-cfg-err" class="err-hint" hidden></p>
+      <div class="ai-actions">
+        <button type="button" id="ai-cfg-cancel" class="ghost" hidden>Huỷ</button>
+        <button type="button" id="ai-cfg-save">Kiểm tra &amp; lưu</button>
+      </div>
+    </div>
+
+    <!-- Đã cấu hình: chỉ một dòng tóm tắt -->
+    <div id="ai-cfg-on" class="ai-cfg-on" hidden>
+      <span id="ai-cfg-sum"></span>
+      <button type="button" id="ai-cfg-edit" class="ghost">Đổi</button>
+      <button type="button" id="ai-cfg-clear" class="ghost">Xoá key</button>
+    </div>
+
+    <div id="ai-body" hidden>
+      <label class="ai-field ai-drop">Tệp âm thanh
+        <input id="ai-file" type="file" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a,.webm,.mp4">
+      </label>
+
+      <div id="ai-meter" class="ai-meter" hidden></div>
+
+      <div class="ai-actions">
+        <button type="button" id="ai-run">Phân tích</button>
+      </div>
+
+      <div id="ai-busy" hidden>
+        <div class="ai-track"><i id="ai-bar"></i></div>
+        <span id="ai-label">đang chờ…</span>
+      </div>
+      <p id="ai-error" class="err-hint" hidden></p>
+
+      <div id="ai-result" hidden>
+        <p id="ai-summary" class="ai-note"></p>
+        <div class="ai-bulk">
+          <span class="ai-bulk-t">Cho mọi đoạn</span>
+          <label class="check"><input type="checkbox" id="ai-all-count_in" checked>Đếm vào</label>
+          <label class="check"><input type="checkbox" id="ai-all-read_marker" checked>Đọc tên</label>
+          <label class="check"><input type="checkbox" id="ai-all-count_out" checked>Đếm chuyển</label>
+        </div>
+        <ol id="ai-preview"></ol>
+        <div id="ai-measure" hidden></div>
+        <div class="ai-actions">
+          <button type="button" id="ai-reject" class="ghost">Bỏ kết quả</button>
+          <button type="button" id="ai-apply">Dùng cấu trúc này</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="ai-actions ai-close-row">
+      <button type="button" id="ai-close" class="ghost">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='ai_layout.js') }}" defer></script>
